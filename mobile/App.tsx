@@ -1,11 +1,29 @@
 import React from "react";
-import { SafeAreaView, Text, View, Pressable, ActivityIndicator } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 type Payload = { generatedAt: string; series: any[] };
 
 const CACHE_KEY = "salary_costofliving_latest_v1";
 const DATA_URL = "https://raw.githubusercontent.com/PhoenixKola/salary-costofliving/main/data/latest.json";
+
+function Card(props: { title: string; value: string; subtitle?: string }) {
+  return (
+    <View
+      style={{
+        padding: 14,
+        borderRadius: 16,
+        backgroundColor: "rgba(0,0,0,0.06)",
+        gap: 6
+      }}
+    >
+      <Text style={{ opacity: 0.7 }}>{props.title}</Text>
+      <Text style={{ fontSize: 22, fontWeight: "700" }}>{props.value}</Text>
+      {props.subtitle ? <Text style={{ opacity: 0.7 }}>{props.subtitle}</Text> : null}
+    </View>
+  );
+}
 
 export default function App() {
   const [loading, setLoading] = React.useState(true);
@@ -38,31 +56,47 @@ export default function App() {
     load();
   }, [load]);
 
+  const generated = payload?.generatedAt ?? "—";
+  const seriesCount = payload?.series?.length ?? 0;
+
   return (
-    <SafeAreaView style={{ flex: 1, padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 24, fontWeight: "700" }}>Salary + Cost of Living</Text>
+    <SafeAreaProvider>
+      <SafeAreaView style={{ flex: 1, backgroundColor: "white" }} edges={["top", "bottom"]}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24, gap: 12 }}>
+          <Text style={{ fontSize: 26, fontWeight: "800" }}>Salary + Cost of Living</Text>
 
-      {msg ? (
-        <View style={{ padding: 10, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.06)" }}>
-          <Text>{msg}</Text>
-        </View>
-      ) : null}
+          {msg ? (
+            <View style={{ padding: 12, borderRadius: 12, backgroundColor: "rgba(255,165,0,0.15)" }}>
+              <Text>{msg}</Text>
+            </View>
+          ) : null}
 
-      {loading ? (
-        <ActivityIndicator />
-      ) : (
-        <>
-          <View style={{ padding: 12, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.06)" }}>
-            <Text style={{ opacity: 0.7 }}>Generated</Text>
-            <Text style={{ fontSize: 16, fontWeight: "700" }}>{payload?.generatedAt ?? "—"}</Text>
-            <Text style={{ opacity: 0.7 }}>Series count: {payload?.series?.length ?? 0}</Text>
+          <Card title="Wage (quarterly)" value={seriesCount ? "—" : "No data yet"} subtitle="From INSTAT Wage tables" />
+          <Card title="Inflation (YoY)" value={seriesCount ? "—" : "No data yet"} subtitle="From INSTAT CPI tables" />
+          <Card title="Budget (monthly)" value="Coming next" subtitle="City + lifestyle + household scenario" />
+
+          <View style={{ padding: 14, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.06)", gap: 6 }}>
+            <Text style={{ opacity: 0.7 }}>Status</Text>
+            <Text style={{ fontWeight: "700" }}>Generated</Text>
+            <Text>{generated}</Text>
+            <Text style={{ opacity: 0.7 }}>Series count: {seriesCount}</Text>
           </View>
 
-          <Pressable onPress={load} style={{ padding: 14, borderRadius: 16, backgroundColor: "black" }}>
-            <Text style={{ color: "white", textAlign: "center", fontWeight: "700" }}>Refresh</Text>
+          <Pressable
+            onPress={load}
+            style={{
+              marginTop: 4,
+              padding: 14,
+              borderRadius: 16,
+              backgroundColor: "black",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+          >
+            {loading ? <ActivityIndicator color="white" /> : <Text style={{ color: "white", fontWeight: "800" }}>Refresh</Text>}
           </Pressable>
-        </>
-      )}
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
