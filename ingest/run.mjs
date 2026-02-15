@@ -32,85 +32,164 @@ function toRows(buf) {
   return xlsx.utils.sheet_to_json(ws, { header: 1, raw: true });
 }
 
-function findHeaderRow(rows) {
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i].map((x) => String(x ?? "").trim().toLowerCase());
-    if (r.includes("code") && r.includes("groups")) return i;
+function norm(s) {
+  return String(s ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function isMonthLabel(s) {
+  return /^\d{2}-\d{2}$/.test(String(s ?? "").trim());
+}
+
+function isQuarterLabel(s) {
+  const t = String(s ?? "").trim();
+  return /^[iv]{1,3}\/\d{2}$/i.test(t) || /^iv\/\d{2}$/i.test(t);
+}
+
+function findCpiHeaderRow(rows) {
+  const CODE_KEYS = new Set(["code", "kodi"]);
+  const GROUP_KEYS = new Set(["groups", "grupet", "group", "grupi"]);
+
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r] ?? [];
+    const cells = row.map(norm);
+
+    const hasCode = cells.some((c) => CODE_KEYS.has(c));
+    const hasGroups = cells.some((c) => GROUP_KEYS.has(c));
+    const hasManyMonths = row.filter((c) => isMonthLabel(c)).length >= 6;
+
+    if (hasManyMonths && (hasCode || hasGroups)) return r;
   }
+
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r] ?? [];
+    const hasManyMonths = row.filter((c) => isMonthLabel(c)).length >= 6;
+    if (hasManyMonths) return r;
+  }
+
   return -1;
 }
 
-function extractSeriesFromTable(rows, rowNameMatch) {
-  const h = findHeaderRow(rows);
+function extractCpiTotalSeries(rows) {
+  const h = findCpiHeaderRow(rows);
   if (h === -1) return null;
 
   const header = rows[h].map((x) => String(x ?? "").trim());
-  const dataRows = rows.slice(h + 1);
+  const headerNorm = header.map(norm);
 
-  const idxCode = header.findIndex((c) => c.trim().toLowerCase() === "code");
-  const idxGroups = header.findIndex((c) => c.trim().toLowerCase() === "groups");
+  const codeIdx = headerNorm.findIndex((c) => c === "code" || c === "kodi");
+  const groupsIdx = headerNorm.findIndex((c) => c === "groups" || c === "grupet" || c === "group" || c === "grupi");
 
   const timeCols = [];
   for (let i = 0; i < header.length; i++) {
-    if (i === idxCode || i === idxGroups) continue;
-    const label = header[i];
-    if (!label) continue;
-    timeCols.push({ i, label });
+    if (i === codeIdx || i === groupsIdx) continue;
+    const lab = header[i];
+    if (isMonthLabel(lab)) timeCols.push({ i, lab: String(lab).trim() });
   }
 
+  if (!timeCols.length) return null;
+
+  const dataRows = rows.slice(h + 1);
+
+  const isTotalRow = (row) => {
+    const code = codeIdx >= 0 ? norm(row[codeIdx]) : "";
+    const grp = groupsIdx >= 0 ? norm(row[groupsIdx]) : "";
+    return (
+      code === "000000" ||
+      grp === "total" ||
+      grp.includes("total") ||
+      grp === "gjithsej" ||
+      grp.includes("gjithsej")
+    );
+  };
+
+  const row = dataRows.find(isTotalRow);
+  if (!row) return null;
+
+  const points = timeCols
+    .map(({ i, lab }) => {
+      const v = row[i];
+      const num = typeof v === "number" ? v : Number(String(v ?? "").replace(",", "."));
+      if (!Number.isFinite(num)) return null;
+      return { t: lab, v: num };
+    })
+    .filter(Boolean);
+
+  return points.length ? points : null;
+}
+
+function findWageHeaderRow(rows) {
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r] ?? [];
+    const cells = row.map(norm);
+    const hasDesc =
+      cells.some((c) => c.includes("pershkrimi")) ||
+      cells.some((c) => c.includes("per shkrimi")) ||
+      cells.some((c) => c.includes("pershkrim")) ||
+      cells.some((c) => c.includes("description"));
+    const hasQuarters = row.filter((c) => isQuarterLabel(c)).length >= 4;
+    if (hasDesc && hasQuarters) return r;
+  }
+
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r] ?? [];
+    const hasQuarters = row.filter((c) => isQuarterLabel(c)).length >= 4;
+    if (hasQuarters) return r;
+  }
+
+  return -1;
+}
+
+function extractWageAvgSeries(rows) {
+  const h = findWageHeaderRow(rows);
+  if (h === -1) return null;
+
+  const header = rows[h].map((x) => String(x ?? "").trim());
+  const headerNorm = header.map(norm);
+
+  const descIdx = headerNorm.findIndex(
+    (c) => c.includes("pershkrimi") || c.includes("description")
+  );
+
+  const timeCols = header
+    .map((c, i) => ({ c: String(c ?? "").trim(), i }))
+    .filter(({ c }) => isQuarterLabel(c));
+
+  if (!timeCols.length) return null;
+
+  const dataRows = rows.slice(h + 1);
+
+  const avgNeedles = [
+    "average gross monthly wage per employee",
+    "paga mesatare mujore bruto per punonjes",
+    "paga mesatare mujore bruto per punonjesit",
+    "paga mesatare mujore bruto"
+  ];
+
   const row = dataRows.find((r) => {
-    const g = String(r[idxGroups] ?? "").trim().toLowerCase();
-    return g === rowNameMatch.toLowerCase();
+    const cell = descIdx >= 0 ? norm(r[descIdx]) : norm(r[0]);
+    return avgNeedles.some((n) => cell.includes(n));
   });
 
   if (!row) return null;
 
   const points = timeCols
-    .map(({ i, label }) => {
-      const v = row[i];
-      const num = typeof v === "number" ? v : Number(String(v ?? "").replace(",", "."));
-      if (!Number.isFinite(num)) return null;
-      return { t: label, v: num };
-    })
-    .filter(Boolean);
-
-  if (!points.length) return null;
-  return points;
-}
-
-function extractWageSeries(rows) {
-  const h = rows.findIndex((r) => r.some((x) => String(x ?? "").toLowerCase().includes("përshkrimi")));
-  if (h === -1) return null;
-
-  const header = rows[h].map((x) => String(x ?? "").trim());
-  const idxDesc = header.findIndex((c) => c.toLowerCase().includes("përshkrimi") || c.toLowerCase().includes("pershkrimi"));
-  const timeCols = header
-    .map((c, i) => ({ c, i }))
-    .filter(({ c }) => c && /[iv]+\/\d{2}/i.test(c));
-
-  const dataRows = rows.slice(h + 1);
-
-  const pickRow = (needle) =>
-    dataRows.find((r) => String(r[idxDesc] ?? "").trim().toLowerCase() === needle.toLowerCase());
-
-  const avg = pickRow("Average gross monthly wage per employee") || pickRow("Paga mesatare mujore bruto për punonjës");
-  if (!avg) return null;
-
-  const points = timeCols
     .map(({ i, c }) => {
-      const v = avg[i];
+      const v = row[i];
       const num = typeof v === "number" ? v : Number(String(v ?? "").replace(",", "."));
       if (!Number.isFinite(num)) return null;
       return { t: c, v: num };
     })
     .filter(Boolean);
 
-  if (!points.length) return null;
-  return points;
+  return points.length ? points : null;
 }
 
-function latestPoint(points) {
-  return points[points.length - 1];
+function last(points) {
+  return points[points.length - 1] ?? null;
 }
 
 function writeJson(file, obj) {
@@ -125,60 +204,46 @@ async function main() {
   const cpiIndexBuf = await download(FILES.cpiIndex);
   fs.writeFileSync(path.join(RAW_DIR, "cpi-index.xlsx"), cpiIndexBuf);
   const cpiIndexRows = toRows(cpiIndexBuf);
-  const cpiIndexTotal = extractSeriesFromTable(cpiIndexRows, "Total");
+  const cpiIndexTotal = extractCpiTotalSeries(cpiIndexRows);
 
   const cpiYoyBuf = await download(FILES.cpiAnnualChange);
   fs.writeFileSync(path.join(RAW_DIR, "cpi-annual-change.xlsx"), cpiYoyBuf);
   const cpiYoyRows = toRows(cpiYoyBuf);
-  const cpiYoyTotal = extractSeriesFromTable(cpiYoyRows, "Total");
+  const cpiYoyTotal = extractCpiTotalSeries(cpiYoyRows);
 
   const wageBuf = await download(FILES.wageAvgAndMin);
-  fs.writeFileSync(path.join(RAW_DIR, "wage-avg-min.xlsx"), wageBuf);
+  fs.writeFileSync(path.join(RAW_DIR, "wage-tab-5.xlsx"), wageBuf);
   const wageRows = toRows(wageBuf);
-  const wageAvg = extractWageSeries(wageRows);
+  const wageAvg = extractWageAvgSeries(wageRows);
 
   const series = [];
 
   if (cpiIndexTotal) {
-    series.push({
-      id: "CPI_TOTAL_INDEX",
-      freq: "monthly",
-      unit: "index",
-      points: cpiIndexTotal
-    });
+    series.push({ id: "CPI_TOTAL_INDEX", freq: "monthly", unit: "index", points: cpiIndexTotal });
   }
 
   if (cpiYoyTotal) {
-    series.push({
-      id: "CPI_TOTAL_YOY_PCT",
-      freq: "monthly",
-      unit: "percent",
-      points: cpiYoyTotal
-    });
+    series.push({ id: "CPI_TOTAL_YOY_PCT", freq: "monthly", unit: "percent", points: cpiYoyTotal });
   }
 
   if (wageAvg) {
-    series.push({
-      id: "WAGE_AVG_GROSS_ALL",
-      freq: "quarterly",
-      unit: "ALL",
-      points: wageAvg
-    });
+    series.push({ id: "WAGE_AVG_GROSS_ALL", freq: "quarterly", unit: "ALL", points: wageAvg });
   }
 
   const payload = {
     generatedAt,
     sources: { hubs: SOURCES, files: FILES },
     latest: {
-      cpiIndex: cpiIndexTotal ? latestPoint(cpiIndexTotal) : null,
-      cpiYoy: cpiYoyTotal ? latestPoint(cpiYoyTotal) : null,
-      wageAvg: wageAvg ? latestPoint(wageAvg) : null
+      cpiIndex: cpiIndexTotal ? last(cpiIndexTotal) : null,
+      cpiYoy: cpiYoyTotal ? last(cpiYoyTotal) : null,
+      wageAvg: wageAvg ? last(wageAvg) : null
     },
     series
   };
 
   writeJson(OUT_LATEST, payload);
   console.log("Wrote", OUT_LATEST, "series:", series.length);
+  console.log("Latest:", payload.latest);
 }
 
 main().catch((e) => {
