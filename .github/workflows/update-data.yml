@@ -1,0 +1,37 @@
+name: update-data
+
+on:
+  schedule:
+    - cron: "15 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install ingest deps
+        working-directory: ingest
+        run: npm ci
+
+      - name: Run ingest
+        working-directory: ingest
+        run: npm run run
+
+      - name: Commit if changed
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add data
+            git commit -m "data: refresh"
+            git push
+          fi
