@@ -1,22 +1,29 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Kosto Jetese Shqiperi",
+    "slug": "kosto-jetese-shqiperi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
-    "ios": {
-      "supportsTablet": true
-    },
+    "newArchEnabled": true,
     "android": {
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.phoenixkola.kostojeteseshqiperi",
+      "versionCode": 1
     },
+    "plugins": [
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-2653462201538649~1801781494"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
-        "projectId": "ba98bf11-589f-463b-bb14-f49682c4028a"
+        "projectId": "7582e6c3-d16f-4aa2-8733-a45916cedc8e"
       }
     }
   }

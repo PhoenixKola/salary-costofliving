@@ -1,7 +1,8 @@
 import React from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View, TextInput } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View, TextInput, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import mobileAds, { BannerAd, BannerAdSize, TestIds } from "react-native-google-mobile-ads";
 
 type LatestPoint = { t: string; v: number };
 
@@ -24,7 +25,7 @@ type BudgetScenario = {
   rent: number;
 };
 
-const CACHE_KEY = "salary_costofliving_latest_v2";
+const CACHE_KEY = "salary_costofliving_latest_v3";
 const DATA_URL = "https://raw.githubusercontent.com/PhoenixKola/salary-costofliving/main/data/latest.json";
 
 const BUDGET_KEY = "salary_costofliving_budget_v1";
@@ -126,14 +127,7 @@ const copy: Record<Language, Record<string, string>> = {
 
 function Card(props: { title: string; value: string; subtitle?: string }) {
   return (
-    <View
-      style={{
-        padding: 14,
-        borderRadius: 16,
-        backgroundColor: "rgba(0,0,0,0.06)",
-        gap: 6
-      }}
-    >
+    <View style={{ padding: 14, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.06)", gap: 6 }}>
       <Text style={{ opacity: 0.7 }}>{props.title}</Text>
       <Text style={{ fontSize: 22, fontWeight: "700" }}>{props.value}</Text>
       {props.subtitle ? <Text style={{ opacity: 0.7 }}>{props.subtitle}</Text> : null}
@@ -141,11 +135,7 @@ function Card(props: { title: string; value: string; subtitle?: string }) {
   );
 }
 
-function Segmented(props: {
-  options: { key: string; label: string }[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
+function Segmented(props: { options: { key: string; label: string }[]; value: string; onChange: (v: string) => void }) {
   return (
     <View style={{ flexDirection: "row", gap: 8 }}>
       {props.options.map((o) => (
@@ -168,6 +158,8 @@ function Segmented(props: {
 }
 
 export default function App() {
+  const insets = useSafeAreaInsets();
+
   const [loading, setLoading] = React.useState(true);
   const [payload, setPayload] = React.useState<Payload | null>(null);
   const [msg, setMsg] = React.useState("");
@@ -182,6 +174,8 @@ export default function App() {
   });
 
   const t = copy[lang];
+
+  const adUnitId = __DEV__ ? TestIds.BANNER : "ca-app-pub-2653462201538649/2513886493";
 
   const saveLang = React.useCallback(async (next: Language) => {
     setLang(next);
@@ -217,6 +211,8 @@ export default function App() {
   }, [t.offline, t.noData]);
 
   React.useEffect(() => {
+    mobileAds().initialize();
+
     (async () => {
       const savedLang = await AsyncStorage.getItem(LANG_KEY);
       if (savedLang === "en" || savedLang === "sq") setLang(savedLang);
@@ -238,9 +234,9 @@ export default function App() {
   const budgetCalc = calcBudget({ ...budget, rent: rentValue });
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={{ flex: 1, backgroundColor: "white" }} edges={["top", "bottom"]}>
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24, gap: 12 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "white" }} edges={["top", "left", "right", "bottom"]}>
+      <View style={{ flex: 1, padding: 16, paddingTop: insets.top + 12 }}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 16, gap: 12 }} showsVerticalScrollIndicator={false}>
           <Text style={{ fontSize: 26, fontWeight: "800" }}>{t.title}</Text>
 
           <View style={{ padding: 14, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.06)", gap: 10 }}>
@@ -322,12 +318,7 @@ export default function App() {
               }}
               keyboardType="numeric"
               placeholder="0"
-              style={{
-                paddingVertical: 10,
-                paddingHorizontal: 12,
-                borderRadius: 12,
-                backgroundColor: "white"
-              }}
+              style={{ paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: "white" }}
             />
 
             <View style={{ gap: 6, paddingTop: 6 }}>
@@ -363,7 +354,20 @@ export default function App() {
             {loading ? <ActivityIndicator color="white" /> : <Text style={{ color: "white", fontWeight: "800" }}>{t.refresh}</Text>}
           </Pressable>
         </ScrollView>
-      </SafeAreaView>
-    </SafeAreaProvider>
+      </View>
+
+      <View
+        style={{
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "white",
+          borderTopWidth: 1,
+          borderTopColor: "rgba(0,0,0,0.06)",
+          paddingBottom: Platform.OS === "android" ? 6 : 0
+        }}
+      >
+        <BannerAd unitId={adUnitId} size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER} />
+      </View>
+    </SafeAreaView>
   );
 }
