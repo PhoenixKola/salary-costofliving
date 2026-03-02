@@ -7,7 +7,8 @@ import {
   TextInput,
   StyleSheet,
   Animated,
-  Easing
+  Easing,
+  Platform
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -601,9 +602,9 @@ export default function App() {
       </View>
 
       {/* Ad bar */}
-      {/* <View style={[styles.adBar, { paddingBottom: insets.bottom + (Platform.OS === "android" ? 6 : 0) }]}>
+      <View style={[styles.adBar, { paddingBottom: insets.bottom + (Platform.OS === "android" ? 6 : 0) }]}>
         <BannerAd unitId={adUnitId} size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER} />
-      </View> */}
+      </View>
     </SafeAreaView>
   );
 }
