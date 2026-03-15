@@ -16,7 +16,7 @@ const FILES = {
   cpiIndex: "https://www.instat.gov.al/media/dw0fggvs/tab-3.xlsx",
   cpiMonthlyChange: "https://www.instat.gov.al/media/ianljo4o/tab-4.xlsx",
   cpiAnnualChange: "https://www.instat.gov.al/media/yhwf4pvd/tab-5.xlsx",
-  wageAvgAndMin: "https://www.instat.gov.al/media/nnmcdq1f/tab-5.xlsx"
+  wageAvgAndMin: "https://www.instat.gov.al/media/12938/tab5.xlsx"
 };
 
 async function download(url) {
