@@ -19,11 +19,40 @@ const FILES = {
   wageAvgAndMin: "https://www.instat.gov.al/media/12938/tab5.xlsx"
 };
 
-async function download(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Fetch failed ${res.status} ${url}`);
-  const ab = await res.arrayBuffer();
-  return Buffer.from(ab);
+async function download(url, { retries = 3, timeoutMs = 30000 } = {}) {
+  let lastErr;
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "salary-costofliving-ingest/1.0"
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error(`Fetch failed ${res.status} ${url}`);
+      }
+
+      const ab = await res.arrayBuffer();
+      return Buffer.from(ab);
+    } catch (err) {
+      lastErr = err;
+      console.warn(`Download failed (attempt ${attempt}/${retries}) for ${url}`, err);
+
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, attempt * 2000));
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  throw lastErr;
 }
 
 function toRows(buf) {
@@ -201,20 +230,35 @@ async function main() {
 
   const generatedAt = new Date().toISOString();
 
-  const cpiIndexBuf = await download(FILES.cpiIndex);
-  fs.writeFileSync(path.join(RAW_DIR, "cpi-index.xlsx"), cpiIndexBuf);
-  const cpiIndexRows = toRows(cpiIndexBuf);
-  const cpiIndexTotal = extractCpiTotalSeries(cpiIndexRows);
+  let cpiIndexTotal = null;
+  try {
+    const cpiIndexBuf = await download(FILES.cpiIndex);
+    fs.writeFileSync(path.join(RAW_DIR, "cpi-index.xlsx"), cpiIndexBuf);
+    const cpiIndexRows = toRows(cpiIndexBuf);
+    cpiIndexTotal = extractCpiTotalSeries(cpiIndexRows);
+  } catch (e) {
+    console.warn("Failed to download CPI index:", e.message);
+  }
 
-  const cpiYoyBuf = await download(FILES.cpiAnnualChange);
-  fs.writeFileSync(path.join(RAW_DIR, "cpi-annual-change.xlsx"), cpiYoyBuf);
-  const cpiYoyRows = toRows(cpiYoyBuf);
-  const cpiYoyTotal = extractCpiTotalSeries(cpiYoyRows);
+  let cpiYoyTotal = null;
+  try {
+    const cpiYoyBuf = await download(FILES.cpiAnnualChange);
+    fs.writeFileSync(path.join(RAW_DIR, "cpi-annual-change.xlsx"), cpiYoyBuf);
+    const cpiYoyRows = toRows(cpiYoyBuf);
+    cpiYoyTotal = extractCpiTotalSeries(cpiYoyRows);
+  } catch (e) {
+    console.warn("Failed to download CPI annual change:", e.message);
+  }
 
-  const wageBuf = await download(FILES.wageAvgAndMin);
-  fs.writeFileSync(path.join(RAW_DIR, "wage-tab-5.xlsx"), wageBuf);
-  const wageRows = toRows(wageBuf);
-  const wageAvg = extractWageAvgSeries(wageRows);
+  let wageAvg = null;
+  try {
+    const wageBuf = await download(FILES.wageAvgAndMin);
+    fs.writeFileSync(path.join(RAW_DIR, "wage-tab-5.xlsx"), wageBuf);
+    const wageRows = toRows(wageBuf);
+    wageAvg = extractWageAvgSeries(wageRows);
+  } catch (e) {
+    console.warn("Failed to download wage data:", e.message);
+  }
 
   const series = [];
 
