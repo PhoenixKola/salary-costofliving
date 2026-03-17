@@ -191,17 +191,24 @@ function extractWageAvgSeries(rows) {
 
   const dataRows = rows.slice(h + 1);
 
-  const avgNeedles = [
-    "average gross monthly wage per employee",
-    "paga mesatare mujore bruto per punonjes",
-    "paga mesatare mujore bruto per punonjesit",
-    "paga mesatare mujore bruto"
-  ];
+  console.log("WAGE HEADER ROW:", h);
+  console.log("WAGE HEADER:", header);
+  console.log("WAGE DESC IDX:", descIdx);
+  console.log(
+    "WAGE SAMPLE ROWS:",
+    dataRows.slice(0, 15).map((r) => r.map((x) => String(x ?? "").trim()))
+  );
 
   const row = dataRows.find((r) => {
-    const cell = descIdx >= 0 ? norm(r[descIdx]) : norm(r[0]);
-    return avgNeedles.some((n) => cell.includes(n));
+    const values = r.map((x) => norm(x)).join(" | ");
+    return (
+      values.includes("average monthly wage per employee") &&
+      !values.includes("public sector") &&
+      !values.includes("private sector")
+    );
   });
+
+  console.log("FOUND WAGE ROW:", row);
 
   if (!row) return null;
 
@@ -271,7 +278,7 @@ async function main() {
   }
 
   if (wageAvg) {
-    series.push({ id: "WAGE_AVG_GROSS_ALL", freq: "quarterly", unit: "ALL", points: wageAvg });
+    series.push({ id: "WAGE_AVG_GROSS_ALL", freq: "quarterly", unit: "ALL/month", points: wageAvg });
   }
 
   const payload = {
