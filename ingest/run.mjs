@@ -191,14 +191,6 @@ function extractWageAvgSeries(rows) {
 
   const dataRows = rows.slice(h + 1);
 
-  console.log("WAGE HEADER ROW:", h);
-  console.log("WAGE HEADER:", header);
-  console.log("WAGE DESC IDX:", descIdx);
-  console.log(
-    "WAGE SAMPLE ROWS:",
-    dataRows.slice(0, 15).map((r) => r.map((x) => String(x ?? "").trim()))
-  );
-
   const row = dataRows.find((r) => {
     const values = r.map((x) => norm(x)).join(" | ");
     return (
@@ -207,8 +199,6 @@ function extractWageAvgSeries(rows) {
       !values.includes("private sector")
     );
   });
-
-  console.log("FOUND WAGE ROW:", row);
 
   if (!row) return null;
 
